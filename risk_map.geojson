@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hualien Typhoon Flood Risk Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet." 
+          href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+
+    <script>
+        // 1. Create the map
+        var map = L.map('map').setView([23.9, 121.6], 9); 
+        // Center: Hualien County
+
+        // 2. Add basemap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 16,
+        }).addTo(map);
+
+        // 3. Load risk map GeoJSON
+        fetch("risk_map.geojson")
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    pointToLayer: function(feature, latlng) {
+                        let color;
+
+                        if (feature.properties.cluster_id === 0) {
+                            color = "red";    // High risk
+                        } else if (feature.properties.cluster_id === 1) {
+                            color = "yellow"; // Medium risk
+                        } else {
+                            color = "green";  // Low risk
+                        }
+
+                        return L.circleMarker(latlng, {
+                            radius: 5,
+                            color: color,
+                            fillOpacity: 0.8
+                        });
+                    }
+                }).addTo(map);
+            });
+    </script>
+</body>
+</html>
