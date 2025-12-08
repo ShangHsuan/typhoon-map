@@ -1,276 +1,151 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Taiwan Typhoon Emergency Dashboard</title>
+    <title>Hualien Typhoon Flood Risk Map</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"/>
 
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-
-
-    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
     <style>
-        html, body { margin: 0; height: 100%; width: 100%; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
 
-        /* Thin Emergency Banner */
-        #warningBar {
-            background: #c90000;
+        /* Alert bar */
+        #alert-bar {
+            width: 100%;
+            background: red;
             color: white;
-            padding: 6px 12px;
-            font-size: 15px;
-            font-weight: bold;
             text-align: center;
-            font-family: Arial;
+            padding: 6px;
+            font-weight: bold;
         }
 
+        /* Sidebar */
         #sidebar {
-            width: 260px;
-            height: calc(100% - 40px);
-            background: #f3f3f3;
-            padding: 12px;
-            overflow-y: scroll;
-            float: left;
+            position: absolute;
+            left: 0;
+            top: 40px;
+            bottom: 0;
+            width: 280px;
+            background: #f7f7f7;
+            overflow-y: auto;
+            border-right: 2px solid #ccc;
+            padding: 10px;
+            z-index: 1000;
         }
 
+        /* Map */
         #map {
+            position: absolute;
+            top: 40px;
+            left: 280px;
+            right: 0;
+            bottom: 0;
+            width: calc(100% - 280px);
             height: calc(100% - 40px);
-            width: calc(100% - 260px);
-            float: right;
         }
 
-
-        .legend {
-            background: white;
-            padding: 8px;
-            border-radius: 6px;
-            font-size: 13px;
-            line-height: 16px;
-            border: 1px solid #ccc;
-        }
-        .legend span {
-            width: 14px;
-            height: 14px;
-            display: inline-block;
-            border-radius: 50%;
-            margin-right: 6px;
+        .station-item {
+            margin-bottom: 6px;
+            font-size: 14px;
         }
     </style>
 </head>
 
 <body>
 
-<!-- Emergency Warning Banner -->
-<div id="warningBar">🔔 Loading CWA Emergency Alerts...</div>
+    <!-- ALERT BAR -->
+    <div id="alert-bar">🔔 Loading CWA Emergency Alerts…</div>
 
-<!-- Sidebar -->
-<div id="sidebar">
-    <h3>🌀 Taiwan Typhoon Dashboard</h3>
-    <p>Real-time rainfall, risk, satellite, and typhoon tracking.</p>
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+        <h3>📍 Stations & Risk</h3>
+        <div id="station-list">Loading…</div>
+    </div>
 
-    <h4>Stations</h4>
-    <ul id="stationList"></ul>
-</div>
-
-<!-- Main Map -->
-<div id="map"></div>
+    <!-- MAP -->
+    <div id="map"></div>
 
 
-<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
 
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script>
+        /* =======================
+           Initialize Map
+        ======================= */
+        var map = L.map('map').setView([23.7, 121.4], 10);
 
-<script>
-/* ============================================================
-   MAP SETUP
-============================================================ */
-var map = L.map('map').setView([23.7, 121.4], 8);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 18,
+        }).addTo(map);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-/* ============================================================
-   RISK COLOR FUNCTION
-============================================================ */
-function getColor(c) {
-    return c === 0 ? "red" :
-           c === 1 ? "yellow" :
-                      "green";
-}
-
-/* ============================================================
-   WATER VAPOR SATELLITE LAYER
-============================================================ */
-var satelliteWV = L.tileLayer(
-    "https://himawari8.nict.go.jp/himawari8-image/1d/wv/{z}/{x}/{y}.png",
-    { opacity: 0.65 }
-);
-
-/* ============================================================
-   STATION CLUSTERING + HEATMAP
-============================================================ */
-var markerCluster = L.markerClusterGroup();
-var heatPoints = [];
-
-fetch("risk_map.geojson")
-.then(res => res.json())
-.then(data => {
-    let list = document.getElementById("stationList");
-
-    data.features.forEach(f => {
-        let lat = f.geometry.coordinates[1];
-        let lon = f.geometry.coordinates[0];
-        let risk = f.properties.cluster_id;
-        let name = f.properties.name || "Unknown";
-
-        // Heatmap weights
-        heatPoints.push([lat, lon, risk === 0 ? 1 : 0.3]);
-
-        // Marker
-        let marker = L.circleMarker([lat, lon], {
-            radius: 7,
-            fillColor: getColor(risk),
-            color: getColor(risk),
-            fillOpacity: 0.85,
-            weight: 1
-        }).bindPopup(`
-            <b>${name}</b><br>
-            Risk Level: ${risk}<br>
-            County: ${f.properties.county}<br>
-            Town: ${f.properties.town}
-        `);
-
-        markerCluster.addLayer(marker);
-
-        // Sidebar list
-        let li = document.createElement("li");
-        li.innerHTML = `${name} — Risk ${risk}`;
-        li.style.cursor = "pointer";
-        li.onclick = () => map.setView([lat, lon], 13);
-        list.appendChild(li);
-    });
-
-    map.addLayer(markerCluster);
-});
-
-// Heatmap layer
-var heatLayer = L.heatLayer([], { radius: 25 });
-
-setTimeout(() => {
-    heatLayer.setLatLngs(heatPoints);
-}, 1500);
-
-/* ============================================================
-   JTWC ACTIVE TYPHOON TRACK
-============================================================ */
-async function loadTyphoonTrack() {
-    // Using JMA track JSON 
-    let url = "https://www.jma.go.jp/bosai/typhoon/data/track.json";
-
-    try {
-        let res = await fetch(url);
-        let storms = await res.json();
-
-        let active = storms.filter(s => s.active === true);
-
-        if (active.length === 0) {
-            console.log("No active storms");
-            return;
+        /* =======================
+           GeoJSON Points
+        ======================= */
+        function getColor(cluster) {
+            if (cluster === 0) return "red";       // HIGH RISK
+            if (cluster === 1) return "yellow";    // MEDIUM RISK
+            return "green";                        // LOW RISK
         }
 
-        active.forEach(storm => {
-            let past = storm.track;
-            let forecast = storm.forecast;
-
-            // Past track colored 
-            past.forEach((p, i) => {
-                if (i === 0) return;
-                let prev = past[i-1];
-
-                let color =
-                    p.intensity === "TY" ? "red" :
-                    p.intensity === "STY" ? "purple" :
-                    p.intensity === "TS" ? "yellow" :
-                                            "green";
-
-                L.polyline([[prev.lat, prev.lon], [p.lat, p.lon]], {
-                    color: color,
-                    weight: 3
+        fetch("risk_map.geojson")
+            .then(res => res.json())
+            .then(data => {
+                
+                // Add to map
+                L.geoJSON(data, {
+                    pointToLayer: function (feature, latlng) {
+                        return L.circleMarker(latlng, {
+                            radius: 6,
+                            fillColor: getColor(feature.properties.cluster_id),
+                            color: "#000",
+                            weight: 1,
+                            fillOpacity: 0.8
+                        });
+                    }
                 }).addTo(map);
+
+                // Build sidebar list
+                let list = document.getElementById("station-list");
+                list.innerHTML = "";
+
+                data.features.forEach(f => {
+                    let name = f.properties.name || "Unnamed";
+                    let risk =
+                        f.properties.cluster_id === 0 ? "High" :
+                        f.properties.cluster_id === 1 ? "Medium" : "Low";
+
+                    let item = document.createElement("div");
+                    item.className = "station-item";
+                    item.innerHTML = `• ${name} — Risk <b>${risk}</b>`;
+                    list.appendChild(item);
+                });
             });
 
-            // Forecast
-            forecast.forEach(f => {
-                if (f.cone) {
-                    L.polygon(f.cone, {
-                        color: "orange",
-                        fillOpacity: 0.2
-                    }).addTo(map);
-                }
+
+        /* =======================
+           Emergency Alerts
+        ======================= */
+        fetch("https://alerts.ncdr.nat.gov.tw/JSONAtomFeed.ashx")
+            .then(r => r.text())
+            .then(xmlText => {
+                document.getElementById("alert-bar").innerHTML =
+                    "⚠️ No active emergency alerts at this moment";
+            })
+            .catch(() => {
+                document.getElementById("alert-bar").innerHTML =
+                    "⚠️ Unable to load emergency alerts";
             });
-        });
 
-    } catch (err) {
-        console.log("Typhoon track load failed:", err);
-    }
-}
-
-loadTyphoonTrack();
-
-/* ============================================================
-   WARNING BANNER 
-============================================================ */
-async function loadCWAWarning() {
-    let url = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0033-001?Authorization=REPLACE_WITH_YOUR_API_KEY";
-
-    try {
-        let res = await fetch(url);
-        let data = await res.json();
-
-        let text =
-            data.records.location[0].hazardConditions[0].content[0] ||
-            "No current alerts";
-
-        document.getElementById("warningBar").innerHTML = "🔔 " + text;
-
-    } catch {
-        document.getElementById("warningBar").innerHTML =
-            "🔔 Unable to load alerts";
-    }
-}
-
-loadCWAWarning();
-
-/* ============================================================
-   LAYER CONTROL
-============================================================ */
-var overlays = {
-    "Satellite (WV)": satelliteWV,
-    "Rainfall Heatmap": heatLayer
-};
-
-L.control.layers(null, overlays).addTo(map);
-
-/* ============================================================
-   LEGEND
-============================================================ */
-var legend = L.control({position: "bottomright"});
-legend.onAdd = function(map) {
-    let div = L.DomUtil.create("div", "legend");
-    div.innerHTML = `
-        <div><span style="background:red"></span> High Risk</div>
-        <div><span style="background:yellow"></span> Medium Risk</div>
-        <div><span style="background:green"></span> Low Risk</div>
-    `;
-    return div;
-};
-legend.addTo(map);
-
-</script>
+    </script>
 
 </body>
 </html>
