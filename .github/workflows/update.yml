@@ -40,11 +40,24 @@ jobs:
 
         r = requests.get(url)
         print("📡 Status:", r.status_code)
-        if r.status_code != 200:
-            print(r.text)
-            raise SystemExit("❌ API request failed")
+
+        # Print first 500 characters of the response so we know the structure
+        print("🔍 RAW RESPONSE PREVIEW:")
+        print(r.text[:500])
 
         data = r.json()
+
+        # Print available keys
+        print("🔑 TOP LEVEL KEYS:", data.keys())
+
+        if "records" not in data:
+            raise SystemExit("❌ ERROR: 'records' not found in API response")
+
+        print("🔑 RECORD KEYS:", data["records"].keys())
+
+        if "location" not in data["records"]:
+            raise SystemExit("❌ ERROR: 'location' not found — API structure changed")
+
         locations = data["records"]["location"]
 
         features = []
