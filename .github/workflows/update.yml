@@ -2,7 +2,7 @@ name: Update Flood Risk Map
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -33,17 +33,18 @@ jobs:
 
         api = "${CWB_API_KEY}"
         if not api:
-            raise ValueError("❌ ERROR: CWB_API_KEY is empty or not found")
+            raise ValueError("❌ API key is missing")
 
         print("🔍 Using API key:", api[:8] + "********")
-        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={api}"
 
+        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={api}"
         print("🌐 Fetching:", url)
+
         response = requests.get(url)
         print("📡 Status:", response.status_code)
 
         if response.status_code != 200:
-            raise ValueError("❌ API request failed:", response.text)
+            raise ValueError("❌ API cannot be accessed:", response.text)
 
         data = response.json()
         locations = data["records"]["location"]
@@ -52,11 +53,9 @@ jobs:
         for loc in locations:
             lat = float(loc["lat"])
             lon = float(loc["lon"])
-
             rain1 = float(loc["weatherElement"][1]["elementValue"])
             rain24 = float(loc["weatherElement"][6]["elementValue"])
 
-            # Cluster classification
             if rain1 >= 40 or rain24 >= 200:
                 cid = 0
             elif rain1 >= 10 or rain24 >= 80:
@@ -75,7 +74,7 @@ jobs:
         with open("risk_map.geojson", "w") as f:
             json.dump(geojson, f, indent=2)
 
-        print("GeoJSON generated successfully.")
+        print("GeoJSON updated successfully.")
         EOF
 
     - name: Commit and push updated map
