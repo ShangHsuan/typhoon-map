@@ -2,13 +2,16 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Taiwan Typhoon Flood Risk Map</title>
+    <title>Taiwan Typhoon Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"/>
 
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
 
     <style>
         body, html {
@@ -20,6 +23,7 @@
             font-family: Arial, sans-serif;
         }
 
+        /* ALERT BAR */
         #alertBar {
             background: red;
             color: yellow;
@@ -33,6 +37,7 @@
             z-index: 9999;
         }
 
+        /* SIDEBAR */
         #sidebar {
             position: absolute;
             top: 40px;
@@ -46,6 +51,7 @@
             border-right: 1px solid #ccc;
         }
 
+        /* MAP */
         #map {
             position: absolute;
             top: 40px;
@@ -54,154 +60,354 @@
             bottom: 0;
         }
 
-        .station-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
+
+        #switchPanel {
+            position: absolute;
+            top: 50px;
+            right: 20px;
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+            z-index: 9998;
+        }
+
+        .switch-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            background-color: #ccc;
+            border-radius: 24px;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            transition: .4s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+            transition: .4s;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
         }
     </style>
 </head>
 
 <body>
 
-    <!-- ALERT BAR -->
-    <div id="alertBar">🔔 Loading CWA Emergency Alerts...</div>
+<!-- ALERT BAR -->
+<div id="alertBar">🔔 Loading CWA Emergency Alerts…</div>
 
-    <!-- SIDEBAR -->
-    <div id="sidebar">
-        <div class="station-title">📍 Stations & Risk</div>
-        <ul id="stationList"></ul>
+<!-- SIDEBAR -->
+<div id="sidebar">
+    <h3>📍 Stations & Risk</h3>
+    <ul id="stationList"></ul>
+</div>
+
+
+<div id="map"></div>
+
+
+<div id="switchPanel">
+    <div class="switch-row">
+        Typhoon
+        <label class="switch"><input type="checkbox" id="toggleTyphoon"><span class="slider"></span></label>
     </div>
 
-    <!-- MAP -->
-    <div id="map"></div>
+    <div class="switch-row">
+        Heatmap
+        <label class="switch"><input type="checkbox" id="toggleHeatmap"><span class="slider"></span></label>
+    </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <div class="switch-row">
+        Wind
+        <label class="switch"><input type="checkbox" id="toggleWind"><span class="slider"></span></label>
+    </div>
+</div>
 
-    <script>
-    /* ============================================================
-    CLEAN COLORED
-    ============================================================ */
 
-    const iconHigh = L.divIcon({
-        html: `<svg width="20" height="20"><circle cx="10" cy="10" r="8" fill="red"/></svg>`,
-        className: ""
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<script>
+/* ============================================================
+   MAP SETUP
+============================================================ */
+var map = L.map('map', {
+    minZoom: 7,
+    maxZoom: 18
+}).setView([23.7, 121.1], 8);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18
+}).addTo(map);
+
+/* ============================================================
+   ICONS
+============================================================ */
+const iconHigh = L.divIcon({ html: `<svg width="20" height="20"><circle cx="10" cy="10" r="8" fill="red"/></svg>`, className:"" });
+const iconMed  = L.divIcon({ html: `<svg width="20" height="20"><circle cx="10" cy="10" r="8" fill="yellow"/></svg>`, className:"" });
+const iconLow  = L.divIcon({ html: `<svg width="20" height="20"><circle cx="10" cy="10" r="8" fill="green"/></svg>`, className:"" });
+const iconCity = L.divIcon({ html: `<svg width="22" height="22"><circle cx="11" cy="11" r="9" fill="blue"/></svg>`, className:"" });
+
+/* ============================================================
+   MAJOR CITIES
+============================================================ */
+const majorCities = [
+    { name:"Taipei",    lat:25.0330, lon:121.5654 },
+    { name:"Taichung",  lat:24.1477, lon:120.6736 },
+    { name:"Tainan",    lat:22.9997, lon:120.2270 },
+    { name:"Kaohsiung", lat:22.6273, lon:120.3014 },
+    { name:"Hualien",   lat:23.9830, lon:121.6000 },
+    { name:"Taitung",   lat:22.7583, lon:121.1444 }
+];
+
+majorCities.forEach(c => {
+    L.marker([c.lat, c.lon], { icon: iconCity }).addTo(map).bindPopup(`<b>${c.name}</b>`);
+});
+
+/* ============================================================
+   LOAD STATIONS
+============================================================ */
+let stationLayer = L.markerClusterGroup({ disableClusteringAtZoom: 11 });
+
+fetch("risk_map.geojson")
+    .then(res => res.json())
+    .then(data => {
+        const list = document.getElementById("stationList");
+
+        data.features.forEach(f => {
+            const lat = f.geometry.coordinates[1];
+            const lon = f.geometry.coordinates[0];
+            const name = f.properties.name;
+            const risk = f.properties.cluster_id;
+
+            let icon = risk === 0 ? iconHigh :
+                       risk === 1 ? iconMed  : iconLow;
+
+            let marker = L.marker([lat, lon], { icon: icon })
+                .bindPopup(`<b>${name}</b><br>Risk: ${risk}`);
+
+            stationLayer.addLayer(marker);
+
+            let li = document.createElement("li");
+            li.innerHTML = `${name} — Risk ${risk}`;
+            list.appendChild(li);
+        });
     });
 
-    const iconMed = L.divIcon({
-        html: `<svg width="20" height="20"><circle cx="10" cy="10" r="8" fill="yellow"/></svg>`,
-        className: ""
+map.on("zoomend", () => {
+    if (map.getZoom() >= 10) {
+        if (!map.hasLayer(stationLayer)) map.addLayer(stationLayer);
+    } else {
+        if (map.hasLayer(stationLayer)) map.removeLayer(stationLayer);
+    }
+});
+
+/* ============================================================
+   RAINFALL HEATMAP
+============================================================ */
+let heatLayer = L.heatLayer([], {
+    radius: 25,
+    gradient: {
+        0.0: 'blue',
+        0.4: 'green',
+        0.7: 'yellow',
+        1.0: 'red'
+    }
+});
+
+fetch("risk_map.geojson")
+    .then(res => res.json())
+    .then(data => {
+        let points = [];
+        data.features.forEach(f => {
+            const lat = f.geometry.coordinates[1];
+            const lon = f.geometry.coordinates[0];
+            const r = f.properties.cluster_id === 0 ? 1 :
+                      f.properties.cluster_id === 1 ? 0.5 : 0.2;
+            points.push([lat, lon, r]);
+        });
+        heatLayer.setLatLngs(points);
     });
 
-    const iconLow = L.divIcon({
-        html: `<svg width="20" height="20"><circle cx="10" cy="10" r="8" fill="green"/></svg>`,
-        className: ""
-    });
+/* ============================================================
+   WIND ARROWS
+============================================================ */
+let windLayer = L.layerGroup();
 
-    const iconCity = L.divIcon({
-        html: `<svg width="22" height="22"><circle cx="11" cy="11" r="9" fill="blue"/></svg>`,
-        className: ""
-    });
+function loadWindData() {
+    fetch("https://api.open-meteo.com/v1/gfs?latitude=23.7&longitude=121.1&hourly=windspeed_10m,winddirection_10m")
+        .then(r => r.json())
+        .then(j => {
 
-    /* ============================================================
-       MAP SETUP
-    ============================================================ */
+            windLayer.clearLayers();
 
-    var map = L.map('map', {
-        minZoom: 7,
-        maxZoom: 18
-    }).setView([23.7, 121.1], 8);
+            for (let i = 0; i < 30; i++) {
+                let lat = 22 + Math.random() * 4;
+                let lon = 120 + Math.random() * 4;
+                let speed = j.hourly.windspeed_10m[i];
+                let dir = j.hourly.winddirection_10m[i];
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 18,
-    }).addTo(map);
+                let color =
+                    speed > 25 ? "red" :
+                    speed > 15 ? "orange" : "blue";
 
-    /* ============================================================
-       MAJOR CITIES
-    ============================================================ */
+                let arrow = L.polylineDecorator(
+                    L.polyline([[lat,lon],[lat+0.01,lon]]),
+                    {
+                        patterns: [{
+                            offset: '100%',
+                            repeat: 0,
+                            symbol: L.Symbol.arrowHead({
+                                pixelSize: 15,
+                                polygon: false,
+                                pathOptions: { stroke: true, color: color }
+                            })
+                        }]
+                    }
+                );
 
-    const majorCities = [
-        { name: "Taipei", lat: 25.0330, lon: 121.5654 },
-        { name: "Taichung", lat: 24.1477, lon: 120.6736 },
-        { name: "Tainan", lat: 22.9997, lon: 120.2270 },
-        { name: "Kaohsiung", lat: 22.6273, lon: 120.3014 },
-        { name: "Hualien", lat: 23.9830, lon: 121.6000 },
-        { name: "Taitung", lat: 22.7583, lon: 121.1444 }
-    ];
+                arrow.addTo(windLayer);
+            }
+        });
+}
 
-    majorCities.forEach(city => {
-        L.marker([city.lat, city.lon], { icon: iconCity })
-            .addTo(map)
-            .bindPopup(`<b>${city.name}</b>`);
-    });
+/* ============================================================
+   TYPHOON TRACK 
+============================================================ */
+let typhoonLayer = L.layerGroup();
 
-    /* ============================================================
-       STATION MARKERS (Zoom-controlled)
-    ============================================================ */
+async function loadTyphoon() {
+    try {
+        let res = await fetch("https://www.jma.go.jp/bosai/typhoon/data/track.json");
+        let storms = await res.json();
 
-    let stationLayer = L.markerClusterGroup({
-        disableClusteringAtZoom: 11
-    });
+        typhoonLayer.clearLayers();
 
-    let stationData;
+        storms.filter(s => s.active === true).forEach(storm => {
+            let past = storm.track;
+            let forecast = storm.forecast;
 
-    fetch("risk_map.geojson")
-        .then(res => res.json())
-        .then(data => {
-            stationData = data;
 
-            const list = document.getElementById("stationList");
+            past.forEach((p, i) => {
+                if (i === 0) return;
+                let prev = past[i-1];
 
-            stationData.features.forEach(f => {
-                const lat = f.geometry.coordinates[1];
-                const lon = f.geometry.coordinates[0];
-                const name = f.properties.name;
-                const risk = f.properties.cluster_id;
+                let color =
+                    p.intensity === "TY"  ? "red" :
+                    p.intensity === "STY" ? "purple" :
+                    p.intensity === "TS"  ? "yellow" : "green";
 
-                let icon = risk === 0 ? iconHigh :
-                           risk === 1 ? iconMed : iconLow;
+                L.polyline([[prev.lat, prev.lon],[p.lat,p.lon]], {
+                    color: color,
+                    weight: 3
+                }).addTo(typhoonLayer);
+            });
 
-                let riskText = risk === 0 ? "High" :
-                               risk === 1 ? "Medium" : "Low";
 
-                let marker = L.marker([lat, lon], { icon: icon })
-                    .bindPopup(`<b>${name}</b><br>Risk: ${riskText}`);
+            forecast.forEach(f => {
+                if (f.cone) {
+                    L.polygon(f.cone, {
+                        color: "orange",
+                        fillOpacity: 0.2
+                    }).addTo(typhoonLayer);
+                }
 
-                stationLayer.addLayer(marker);
-
-                // Sidebar list
-                let li = document.createElement("li");
-                li.innerHTML = `${name} — <b>${riskText}</b>`;
-                list.appendChild(li);
+ 
+                ["r34", "r50", "r64"].forEach(type => {
+                    if (f[type]) {
+                        L.circle([f.lat, f.lon], {
+                            radius: f[type] * 1000,
+                            color: type === "r34" ? "yellow" :
+                                   type === "r50" ? "orange" : "red",
+                            fillOpacity: 0.05
+                        }).addTo(typhoonLayer);
+                    }
+                });
             });
         });
 
-    // Show only when zoomed in
-    map.on("zoomend", () => {
-        if (map.getZoom() >= 10) {
-            if (!map.hasLayer(stationLayer)) map.addLayer(stationLayer);
-        } else {
-            if (map.hasLayer(stationLayer)) map.removeLayer(stationLayer);
-        }
+    } catch (err) {
+        console.log("Typhoon load error:", err);
+    }
+}
+
+/* ============================================================
+ TOGGLE SWITCHES
+============================================================ */
+document.getElementById("toggleTyphoon").addEventListener("change", e => {
+    if (e.target.checked) {
+        loadTyphoon();
+        map.addLayer(typhoonLayer);
+    } else {
+        map.removeLayer(typhoonLayer);
+    }
+});
+
+document.getElementById("toggleHeatmap").addEventListener("change", e => {
+    if (e.target.checked) map.addLayer(heatLayer);
+    else map.removeLayer(heatLayer);
+});
+
+document.getElementById("toggleWind").addEventListener("change", e => {
+    if (e.target.checked) {
+        loadWindData();
+        map.addLayer(windLayer);
+    } else {
+        map.removeLayer(windLayer);
+    }
+});
+
+/* ============================================================
+ALERT BAR
+============================================================ */
+fetch("https://opendata.cwa.gov.tw/api/v1/rest/datastore/W-C0033-001?Authorization=YOUR_CWA_API_KEY_HERE")
+    .then(r => r.json())
+    .then(j => {
+        let msg = j.records?.location?.[0]?.hazardConditions?.[0]?.content?.[0];
+        document.getElementById("alertBar").textContent =
+            msg ? "🚨 " + msg : "✔ No current emergency alerts";
+    })
+    .catch(() => {
+        document.getElementById("alertBar").textContent =
+            "⚠ Unable to load alerts";
     });
 
-    /* ============================================================
-       EMERGENCY ALERT 
-    ============================================================ */
-
-    fetch("https://alerts.ncdr.nat.gov.tw/JSONAtomFeeds.ashx")
-        .then(r => r.json())
-        .then(j => {
-            document.getElementById("alertBar").textContent =
-                j.entry?.length ? "🚨 Emergency Alert Active — Check sidebar!" :
-                                  "✔ No active emergency alerts";
-        })
-        .catch(() => {
-            document.getElementById("alertBar").textContent =
-                "⚠ Unable to load emergency alerts";
-        });
-
-    </script>
+</script>
 </body>
 </html>
