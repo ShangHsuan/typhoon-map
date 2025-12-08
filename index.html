@@ -5,7 +5,6 @@
     <title>Hualien Typhoon Flood Risk Map</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"/>
 
     <style>
@@ -26,35 +25,48 @@
 <body>
     <div id="map"></div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
 
     <script>
-        // Create the map centered on Hualien
+
+        // COLOR FUNCTION (WORKING)
+
+        function getColor(cluster) {
+            if (cluster === 0) return "red";      // HIGH RISK
+            if (cluster === 1) return "yellow";   // MEDIUM RISK
+            return "green";                       // LOW RISK
+        }
+
+        // MAP SETUP
+
         var map = L.map('map').setView([23.7, 121.4], 10);
 
-        // Tile Layer (OpenStreetMap)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18,
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // Load GeoJSON points
+        // LOAD GEOJSON + APPLY COLORS
+
         fetch("risk_map.geojson")
             .then(res => res.json())
             .then(data => {
                 L.geoJSON(data, {
                     pointToLayer: function(feature, latlng) {
-                        let color =
-                            feature.properties.cluster_id === 0 ? "red" :
-                            feature.properties.cluster_id === 1 ? "yellow" :
-                            "green";
+
+                        let color = getColor(feature.properties.cluster_id);
 
                         return L.circleMarker(latlng, {
                             radius: 6,
                             color: color,
-                            fillOpacity: 0.8
-                        });
+                            fillColor: color,
+                            weight: 1,
+                            fillOpacity: 0.9
+                        })
+                        .bindPopup(`
+                            <b>Station:</b> ${feature.properties.name || "Unknown"}<br>
+                            <b>Risk Level:</b> ${feature.properties.cluster_id}
+                        `);
                     }
                 }).addTo(map);
             });
