@@ -9,6 +9,9 @@ jobs:
   update_map:
     runs-on: ubuntu-latest
 
+    env:
+      CWB_API_KEY: ${{ secrets.CWB_API_KEY }}
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
@@ -20,65 +23,59 @@ jobs:
 
     - name: Install dependencies
       run: |
+        python3 -m pip install --upgrade pip
         pip install requests pandas numpy
 
     - name: Generate new GeoJSON
-      env:
-        CWB_API_KEY: ${{ secrets.CWB_API_KEY }}
       run: |
         python3 << 'EOF'
         import requests, json
-        import pandas as pd
 
-        # Fetch rainfall data from Taiwan CWB
-        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWB_API_KEY}"
-        data = requests.get(url).json()
+        api = "${CWB_API_KEY}"
+        if not api:
+            raise ValueError("❌ ERROR: CWB_API_KEY is empty or not found")
 
-        records = data["records"]["location"]
+        print("🔍 Using API key:", api[:8] + "********")
+        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={api}"
 
-        rows = []
-        for r in records:
-            lat = float(r["lat"])
-            lon = float(r["lon"])
-            rain_1h = float(r["weatherElement"][1]["elementValue"])
-            rain_24h = float(r["weatherElement"][6]["elementValue"])
+        print("🌐 Fetching:", url)
+        response = requests.get(url)
+        print("📡 Status:", response.status_code)
 
-            # Simple risk classification
-            if rain_1h >= 40 or rain_24h >= 200:
-                cluster = 0    # HIGH RISK
-            elif rain_1h >= 10 or rain_24h >= 80:
-                cluster = 1    # MEDIUM RISK
-            else:
-                cluster = 2    # LOW RISK
+        if response.status_code != 200:
+            raise ValueError("❌ API request failed:", response.text)
 
-            rows.append({
-                "lon": lon,
-                "lat": lat,
-                "cluster_id": cluster
-            })
+        data = response.json()
+        locations = data["records"]["location"]
 
-        # Convert to GeoJSON
         features = []
-        for row in rows:
+        for loc in locations:
+            lat = float(loc["lat"])
+            lon = float(loc["lon"])
+
+            rain1 = float(loc["weatherElement"][1]["elementValue"])
+            rain24 = float(loc["weatherElement"][6]["elementValue"])
+
+            # Cluster classification
+            if rain1 >= 40 or rain24 >= 200:
+                cid = 0
+            elif rain1 >= 10 or rain24 >= 80:
+                cid = 1
+            else:
+                cid = 2
+
             features.append({
                 "type": "Feature",
-                "properties": {
-                    "cluster_id": row["cluster_id"]
-                },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [row["lon"], row["lat"]]
-                }
+                "properties": {"cluster_id": cid},
+                "geometry": {"type": "Point", "coordinates": [lon, lat]}
             })
 
-        geojson = {
-            "type": "FeatureCollection",
-            "features": features
-        }
+        geojson = {"type": "FeatureCollection", "features": features}
 
         with open("risk_map.geojson", "w") as f:
-            json.dump(geojson, f, indent=4)
+            json.dump(geojson, f, indent=2)
 
+        print("GeoJSON generated successfully.")
         EOF
 
     - name: Commit and push updated map
