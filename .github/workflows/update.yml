@@ -1,0 +1,83 @@
+name: Update Flood Risk Map
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  update_map:
+    runs-on: ubuntu-latest
+
+    env:
+      API: ${{ secrets.CWB_API_KEY }}
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        pip install requests
+
+    - name: Generate GeoJSON
+      run: |
+        python3 << 'EOF'
+        import requests, json, os
+
+        api = os.getenv("API")
+        if not api:
+            raise SystemExit("❌ Secret CWB_API_KEY missing")
+
+        print("🔑 API key loaded:", api[:10] + "********")
+
+        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={api}"
+        print("🌐 URL:", url)
+
+        r = requests.get(url)
+        print("📡 Status:", r.status_code)
+        if r.status_code != 200:
+            print(r.text)
+            raise SystemExit("❌ API request failed")
+
+        data = r.json()
+        locations = data["records"]["location"]
+
+        features = []
+        for loc in locations:
+            lat = float(loc["lat"])
+            lon = float(loc["lon"])
+            rain1 = float(loc["weatherElement"][1]["elementValue"])
+            rain24 = float(loc["weatherElement"][6]["elementValue"])
+
+            if rain1 >= 40 or rain24 >= 200:
+                cid = 0
+            elif rain1 >= 10 or rain24 >= 80:
+                cid = 1
+            else:
+                cid = 2
+
+            features.append({
+                "type": "Feature",
+                "properties": {"cluster_id": cid},
+                "geometry": {"type": "Point", "coordinates": [lon, lat]}
+            })
+
+        geojson = {"type": "FeatureCollection", "features": features}
+        with open("risk_map.geojson", "w") as f:
+            json.dump(geojson, f)
+
+        print("✅ GeoJSON written")
+        EOF
+
+    - name: Commit
+      run: |
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add risk_map.geojson
+        git commit -m "Updated map" || echo "No changes"
+        git push
