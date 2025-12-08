@@ -41,52 +41,19 @@ jobs:
 
         data = r.json()
 
-        # Correct structure uses "Station"
+        # Check structure
         if "records" not in data or "Station" not in data["records"]:
-            raise SystemExit("❌ ERROR: 'Station' field not found in API")
+            raise SystemExit("❌ ERROR: 'Station' not found")
 
         stations = data["records"]["Station"]
 
-        features = []
-        for st in stations:
-            
-            # Latitude/Longitude fields
-            lat = float(st["StationLatitude"])
-            lon = float(st["StationLongitude"])
+        # ⭐ DEBUG: Print one sample station
+        print("\n🔍 SAMPLE STATION DATA:")
+        print(json.dumps(stations[0], indent=2, ensure_ascii=False))
 
-            # Weather elements → we extract rainfall:
-            rain1 = 0
-            rain24 = 0
-            for elem in st.get("WeatherElement", []):
-                if elem["ElementName"] == "Now":
-                    rain1 = float(elem["ElementValue"])
-                if elem["ElementName"] == "24hr":
-                    rain24 = float(elem["ElementValue"])
-
-            # Assign cluster based on rainfall thresholds
-            if rain1 >= 40 or rain24 >= 200:
-                cid = 0
-            elif rain1 >= 10 or rain24 >= 80:
-                cid = 1
-            else:
-                cid = 2
-
-            features.append({
-                "type": "Feature",
-                "properties": {
-                    "cluster_id": cid,
-                    "station": st["StationName"]
-                },
-                "geometry": {"type": "Point", "coordinates": [lon, lat]}
-            })
-
-        geojson = {"type": "FeatureCollection", "features": features}
-
-        with open("risk_map.geojson", "w") as f:
-            json.dump(geojson, f)
-
-        print("✅ GeoJSON updated successfully!")
+        raise SystemExit("⛔ STOP — Identify correct coordinate fields above.")
         EOF
+
 
     - name: Commit
       run: |
