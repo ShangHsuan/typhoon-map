@@ -1,0 +1,90 @@
+name: Update Flood Risk Map
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 minutes
+  workflow_dispatch:
+
+jobs:
+  update_map:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install requests pandas numpy
+
+    - name: Generate new GeoJSON
+      env:
+        CWB_API_KEY: ${{ secrets.CWB_API_KEY }}
+      run: |
+        python3 << 'EOF'
+        import requests, json
+        import pandas as pd
+
+        # Fetch rainfall data from Taiwan CWB
+        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0002-001?Authorization={CWB_API_KEY}"
+        data = requests.get(url).json()
+
+        records = data["records"]["location"]
+
+        rows = []
+        for r in records:
+            lat = float(r["lat"])
+            lon = float(r["lon"])
+            rain_1h = float(r["weatherElement"][1]["elementValue"])
+            rain_24h = float(r["weatherElement"][6]["elementValue"])
+
+            # Simple risk classification
+            if rain_1h >= 40 or rain_24h >= 200:
+                cluster = 0    # HIGH RISK
+            elif rain_1h >= 10 or rain_24h >= 80:
+                cluster = 1    # MEDIUM RISK
+            else:
+                cluster = 2    # LOW RISK
+
+            rows.append({
+                "lon": lon,
+                "lat": lat,
+                "cluster_id": cluster
+            })
+
+        # Convert to GeoJSON
+        features = []
+        for row in rows:
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "cluster_id": row["cluster_id"]
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [row["lon"], row["lat"]]
+                }
+            })
+
+        geojson = {
+            "type": "FeatureCollection",
+            "features": features
+        }
+
+        with open("risk_map.geojson", "w") as f:
+            json.dump(geojson, f, indent=4)
+
+        EOF
+
+    - name: Commit and push updated map
+      run: |
+        git config user.email "action@github.com"
+        git config user.name "GitHub Action"
+        git add risk_map.geojson
+        git commit -m "Auto-update risk map" || echo "No changes"
+        git push
