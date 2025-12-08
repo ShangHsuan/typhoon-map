@@ -41,18 +41,58 @@ jobs:
 
         data = r.json()
 
-        # Check structure
         if "records" not in data or "Station" not in data["records"]:
-            raise SystemExit("❌ ERROR: 'Station' not found")
+            raise SystemExit("❌ ERROR: No station data found")
 
         stations = data["records"]["Station"]
 
-        # ⭐ DEBUG: Print one sample station
-        print("\n🔍 SAMPLE STATION DATA:")
-        print(json.dumps(stations[0], indent=2, ensure_ascii=False))
+        features = []
 
-        raise SystemExit("⛔ STOP — Identify correct coordinate fields above.")
+        for s in stations:
+            name = s.get("StationName", "Unknown")
+            geo = s.get("GeoInfo", {})
+            coords = geo.get("Coordinates", [])
+
+            # Select WGS84 coordinate set
+            wgs84 = None
+            for c in coords:
+                if c.get("CoordinateName") == "WGS84":
+                    wgs84 = c
+                    break
+
+            if not wgs84:
+                continue  # skip station with no WGS84
+
+            try:
+                lat = float(wgs84["StationLatitude"])
+                lon = float(wgs84["StationLongitude"])
+            except Exception:
+                continue
+
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [lon, lat]
+                },
+                "properties": {
+                    "name": name,
+                    "county": geo.get("CountyName"),
+                    "town": geo.get("TownName")
+                }
+            })
+
+        geojson = {
+            "type": "FeatureCollection",
+            "features": features
+        }
+
+        with open("risk_map.geojson", "w") as f:
+            json.dump(geojson, f, ensure_ascii=False)
+
+        print(f"✅ Generated {len(features)} stations")
         EOF
+
 
 
     - name: Commit
