@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="utf-8" />
     <title>Hualien Typhoon Flood Risk Map</title>
@@ -8,144 +8,104 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"/>
 
     <style>
-        body, html {
+        html, body {
             margin: 0;
             padding: 0;
             height: 100%;
             width: 100%;
             overflow: hidden;
-            font-family: Arial, sans-serif;
         }
 
-        /* Alert bar */
-        #alert-bar {
+        #alertBar {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
             background: red;
             color: white;
+            font-size: 16px;
             text-align: center;
             padding: 6px;
-            font-weight: bold;
+            z-index: 9999;
         }
 
-        /* Sidebar */
-        #sidebar {
+        #container {
             position: absolute;
+            top: 40px; 
             left: 0;
-            top: 40px;
+            right: 0;
             bottom: 0;
-            width: 280px;
-            background: #f7f7f7;
-            overflow-y: auto;
+            display: grid;
+            grid-template-columns: 300px auto; 
+            height: calc(100vh - 40px);
+            width: 100vw;
+        }
+
+        /* SIDEBAR LIST */
+        #sidebar {
+            background: white;
             border-right: 2px solid #ccc;
             padding: 10px;
-            z-index: 1000;
+            overflow-y: scroll;
         }
 
-        /* Map */
+        /* MAP */
         #map {
-            position: absolute;
-        top: 30px;          
-        left: 300px;       
-        right: 0;
-        bottom: 0;
-        width: calc(100% - 300px);
-        height: calc(100% - 30px);
-        }
-
-
-        .station-item {
-            margin-bottom: 6px;
-            font-size: 14px;
+            height: 100%;
+            width: 100%;
         }
     </style>
 </head>
 
 <body>
 
-    <!-- ALERT BAR -->
-    <div id="alert-bar">🔔 Loading CWA Emergency Alerts…</div>
+    <div id="alertBar">🔔 Loading CWA Emergency Alerts...</div>
 
-    <!-- SIDEBAR -->
-    <div id="sidebar">
-        <h3>📍 Stations & Risk</h3>
-        <div id="station-list">Loading…</div>
+    <div id="container">
+        <div id="sidebar">
+            <ul id="stationList"></ul>
+        </div>
+
+        <div id="map"></div>
     </div>
-
-    <!-- MAP -->
-    <div id="map"></div>
-
 
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
 
     <script>
-        /* =======================
-           Initialize Map
-        ======================= */
+
         var map = L.map('map').setView([23.7, 121.4], 10);
 
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18,
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
-
-
-        /* =======================
-           GeoJSON Points
-        ======================= */
-        function getColor(cluster) {
-            if (cluster === 0) return "red";       // HIGH RISK
-            if (cluster === 1) return "yellow";    // MEDIUM RISK
-            return "green";                        // LOW RISK
-        }
 
         fetch("risk_map.geojson")
             .then(res => res.json())
             .then(data => {
-                
-                // Add to map
                 L.geoJSON(data, {
-                    pointToLayer: function (feature, latlng) {
+                    pointToLayer: function(feature, latlng) {
+                        let color =
+                            feature.properties.cluster_id === 0 ? "red" :
+                            feature.properties.cluster_id === 1 ? "yellow" :
+                            "green";
+
                         return L.circleMarker(latlng, {
                             radius: 6,
-                            fillColor: getColor(feature.properties.cluster_id),
-                            color: "#000",
-                            weight: 1,
-                            fillOpacity: 0.8
+                            color: color,
+                            fillColor: color,
+                            fillOpacity: 0.9
                         });
                     }
                 }).addTo(map);
 
-                // Build sidebar list
-                let list = document.getElementById("station-list");
-                list.innerHTML = "";
-
+                const list = document.getElementById("stationList");
                 data.features.forEach(f => {
-                    let name = f.properties.name || "Unnamed";
-                    let risk =
-                        f.properties.cluster_id === 0 ? "High" :
-                        f.properties.cluster_id === 1 ? "Medium" : "Low";
-
-                    let item = document.createElement("div");
-                    item.className = "station-item";
-                    item.innerHTML = `• ${name} — Risk <b>${risk}</b>`;
-                    list.appendChild(item);
+                    const li = document.createElement("li");
+                    li.innerHTML = `${f.properties.name} — Risk ${f.properties.cluster_id}`;
+                    list.appendChild(li);
                 });
             });
-
-
-        /* =======================
-           Emergency Alerts
-        ======================= */
-        fetch("https://alerts.ncdr.nat.gov.tw/JSONAtomFeed.ashx")
-            .then(r => r.text())
-            .then(xmlText => {
-                document.getElementById("alert-bar").innerHTML =
-                    "⚠️ No active emergency alerts at this moment";
-            })
-            .catch(() => {
-                document.getElementById("alert-bar").innerHTML =
-                    "⚠️ Unable to load emergency alerts";
-            });
-
     </script>
 
 </body>
